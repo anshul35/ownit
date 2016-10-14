@@ -1,0 +1,8 @@
+{
+	"facebook" : {
+		"clientID" : "1159721030755499",
+		"clientSecret" : "e7a2ebb8f14606d4168cc5f228b1a5e4",
+		"redirectURL" : "http://localhost:9090/login/facebook/successfull"
+
+	}
+}
