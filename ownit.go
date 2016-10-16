@@ -10,5 +10,6 @@ func main() {
 	_ = Auth.RegisterMe
 	_ = API.RegisterMe
 
-	Router.Server()
+	go Router.TCPServer()
+	Router.StartServer()
 }

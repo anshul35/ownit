@@ -3,14 +3,28 @@ package Server;
 import (
 	"fmt"
 	"net/http"
-	"reflect"
 	"encoding/json"
+	"io"
+
 	"github.com/anshul35/ownit/Models"
+	"github.com/anshul35/ownit/Utilities"
 
 	"github.com/gorilla/mux"
 )
 
 var BasePath = "/server"
+
+func DecodeJsonData(body io.ReadCloser) (map[string]interface{}, error) {
+	var data interface{}
+	decoder := json.NewDecoder(body)
+	defer body.Close()
+	err := decoder.Decode(&data)
+	if err != nil {
+		return nil, err
+	}
+	dict := data.(map[string]interface{})
+	return dict, nil
+}
 
 var RegisterServerHandler = http.HandlerFunc(
 	func (w http.ResponseWriter, r *http.Request){
@@ -22,28 +36,37 @@ var RegisterServerHandler = http.HandlerFunc(
 			fmt.Println("cannot deocde the post request: ", err)
 			return
 		}
-		Models.ServerList = append(Models.ServerList, *serv)
+		serv.Save()
+		token, err := GenerateServerToken()
+		if err != nil{
+			fmt.Println("cannot generate token")
+			return
+		}
+		type Response struct{
+			Token string
+		}
+		resp := Response{Token:token}
+		json.NewEncoder(w).Encode(resp)
+		fmt.Println(Models.ServerList)
 })
 
 var AddCommandHandler = http.HandlerFunc(
 	func (w http.ResponseWriter, r *http.Request){
 		comm := new(Models.Command)
-		var data interface{}
 		vars := mux.Vars(r)
-		err, server := Models.GetServerByID(vars["serverID"])
+		server, err := Models.GetServerByID(vars["serverID"])
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		decoder := json.NewDecoder(r.Body)
+		dict, err := DecodeJsonData(r.Body)
 		defer r.Body.Close()
-		err = decoder.Decode(&data)
-		dict := data.(map[string]interface{})
 		for k, v := range dict {
 			switch k {
 				case "CommandString":
 					comm.CommandString = v.(string)
 					comm.CommandServer = server
+					comm.CommandID = Utilities.GenerateUID()
 			}
 		}
 		if err != nil {
@@ -51,16 +74,63 @@ var AddCommandHandler = http.HandlerFunc(
 			return
 		}
 		if comm != nil {
-			Models.CommandList = append(Models.CommandList, *comm)
-		}	
+			fmt.Println("comm is : ", comm)
+			comm.Save()
+		}
+		fmt.Println(Models.CommandList)
 })
 
 var ListCommandHandler = http.HandlerFunc(
 	func (w http.ResponseWriter, r *http.Request){
-	
+		var data = make([]Models.Command, 0)
+		for _, v := range Models.CommandList {
+			data = append(data, *v)
+		}
+		json.NewEncoder(w).Encode(data)
+		return
 })
 
 var RunCommandHandler = http.HandlerFunc(
 	func (w http.ResponseWriter, r *http.Request){
-
+		dict, err := DecodeJsonData(r.Body)
+		_ = err
+		defer r.Body.Close()
+		requestID := ""
+		commands := make([]*Models.Command, 0)
+		for k, v := range dict {
+			switch k {
+				case "CommandID":
+					commList := v.([]interface{})
+					for _, commID := range commList{
+						comm, err := Models.GetCommandByID(commID.(string))
+						if err != nil {
+							fmt.Println("Error: ",err)
+							continue
+						}
+						commands = append(commands, comm)
+					}
+					requestID = Utilities.GenerateUID()
+					break
+			}
+		}
+		if (requestID != "" && len(commands) != 0) {
+			_, err := Models.GetRequestByID(requestID)
+			if err == nil {
+				//Already existing request id
+				return
+			}
+			runReq := Models.RunCommandRequest{
+				RunCommands:commands,
+				RequestID:requestID,
+			}
+			runReq.Send()
+			runReq.Save()
+			type Response struct{
+				RequestID string
+			}
+			resp := Response{RequestID:requestID}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		return
 })
