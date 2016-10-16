@@ -117,13 +117,16 @@ var RunCommandHandler = http.HandlerFunc(
 			_, err := Models.GetRequestByID(requestID)
 			if err == nil {
 				//Already existing request id
+				fmt.Println("Request id already exists!")
 				return
 			}
 			runReq := Models.RunCommandRequest{
 				RunCommands:commands,
 				RequestID:requestID,
 			}
+			fmt.Println("Sending request now...")
 			runReq.Send()
+			fmt.Println("Sent! :)")
 			runReq.Save()
 			type Response struct{
 				RequestID string

@@ -61,6 +61,7 @@ var ActiveRequests = make(map[string]*RunCommandRequest)
 var OldRequests = make(map[string]*RunCommandRequest)
 
 func GetRequestByID(id string) (*RunCommandRequest, error){
+	fmt.Println(ActiveRequests)
 	if req, ok := ActiveRequests[id]; ok {
 		return req, nil
 	}else {
@@ -118,9 +119,9 @@ func (req *RunCommandRequest) Save() bool {
 
 func (req *RunCommandRequest) Send() error {
 	type Data struct {
-		cloudToken string
-		requestID string
-		commands []string
+		CloudToken string
+		RequestID string
+		Commands []string
 	}
 	comms := make([]string, 0)
 	var server = new(Server)
@@ -130,17 +131,25 @@ func (req *RunCommandRequest) Send() error {
 	}
 
 	//build json data for run request
-	data := Data{requestID : req.RequestID,commands : comms}
+	data := Data{RequestID : req.RequestID,Commands : comms}
 	b := new(bytes.Buffer)
-	json.NewEncoder(b).Encode(data)
+	err := json.NewEncoder(b).Encode(data)
+	if err != nil {
+		fmt.Println("Error in encoding json, err is ", err)
+		return err
+	}
 
 	//build server url
 	host := server.IP
 	port  := Constants.ClientServerPort
-	url := host + ":" + port + "/api/v1/server/commands/run"
+	url := "http://" + host + ":" + port + "/api/v1/server/commands/run"
 
 	//Post data at url
-	resp, _ := http.Post(url, "application/json; charset=utf-8", b)
+	resp, err := http.Post(url, "application/json; charset=utf-8", b)
+	if err != nil {
+		fmt.Println("error : ", err)
+		return err
+	}
 	fmt.Println(resp)
 	return nil
 }

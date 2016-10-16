@@ -11,18 +11,19 @@ func TCPHandler(conn net.Conn) {
 	
 	//Read first input from the buffer, 
 	//which should be the requestID of the command
-	_, err := conn.Read(buffer)
+	n, err := conn.Read(buffer)
 	if err != nil {
 		fmt.Println("Cannot read buffer")
 		return
 	}
-	requestID := string(buffer)
+	requestID := string(buffer[:n])
+	fmt.Println("Response for request id ", requestID)
 
 	//Get req if the requestID still valid?
 	runReq, err := Models.GetRequestByID(requestID)
 	//Not valid
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("No request found while reading tcp data. Error:",err)
 		return
 	}
 	_ = runReq
@@ -40,7 +41,7 @@ func TCPHandler(conn net.Conn) {
 		if (n != 0){
 			//do something, for instance, 
 			//send data to a message queue
-			fmt.Println(string(buffer))
+			fmt.Println(string(buffer[:n]))
 		}
 	}
 	return
