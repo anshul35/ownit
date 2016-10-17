@@ -1,13 +1,11 @@
-package Utilities;
+package Utilities
 
-import(
-	"time"
+import (
 	"strconv"
+	"time"
 )
 
-
-func GenerateUID() string{
+func GenerateUID() string {
 	curTime := int(time.Now().UnixNano())
 	return strconv.Itoa(curTime)
 }
-

@@ -3,12 +3,12 @@ package Router
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"net"
+	"net/http"
 
-	"github.com/gorilla/mux"
-	"github.com/anshul35/ownit/Settings/Constants"
 	"github.com/anshul35/ownit/API/Server"
+	"github.com/anshul35/ownit/Settings/Constants"
+	"github.com/gorilla/mux"
 )
 
 type Route struct {
@@ -36,7 +36,7 @@ func StartServer() {
 }
 
 func TCPServer() {
-	l, err := net.Listen("tcp", Constants.TCPHost + ":" + Constants.TCPPort)
+	l, err := net.Listen("tcp", Constants.TCPHost+":"+Constants.TCPPort)
 	if err != nil {
 		fmt.Println("Cannot start the tcp server. : ", err)
 		return
@@ -44,7 +44,7 @@ func TCPServer() {
 
 	defer l.Close()
 
-	for{
+	for {
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Cannot accept to the conn request : ", err)

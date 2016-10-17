@@ -1,18 +1,20 @@
-package Server;
+package Server
 
 import (
-	"fmt"
-	"net/http"
 	"encoding/json"
 	"io"
+	"net/http"
+	"strings"
 
+	"github.com/anshul35/ownit/Auth/JWT"
 	"github.com/anshul35/ownit/Models"
 	"github.com/anshul35/ownit/Utilities"
 
+	log "github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
-var BasePath = "/server"
+const BasePath = "/server"
 
 func DecodeJsonData(body io.ReadCloser) (map[string]interface{}, error) {
 	var data interface{}
@@ -20,6 +22,7 @@ func DecodeJsonData(body io.ReadCloser) (map[string]interface{}, error) {
 	defer body.Close()
 	err := decoder.Decode(&data)
 	if err != nil {
+		log.Error("URL handler: unable to decode json data. Error:", err)
 		return nil, err
 	}
 	dict := data.(map[string]interface{})
@@ -27,113 +30,178 @@ func DecodeJsonData(body io.ReadCloser) (map[string]interface{}, error) {
 }
 
 var RegisterServerHandler = http.HandlerFunc(
-	func (w http.ResponseWriter, r *http.Request){
+	func(w http.ResponseWriter, r *http.Request) {
 		serv := new(Models.Server)
 		decoder := json.NewDecoder(r.Body)
 		defer r.Body.Close()
 		err := decoder.Decode(serv)
 		if err != nil {
-			fmt.Println("cannot deocde the post request: ", err)
+			log.Info("URL Handler: Wrong format json posted for registering server")
+			w.WriteHeader(http.StatusNotAcceptable)
+			w.Write([]byte("Please POST json data in correct format"))
 			return
 		}
-		serv.Save()
+		defer serv.Save()
 		token, err := GenerateServerToken()
-		if err != nil{
-			fmt.Println("cannot generate token")
+		if err != nil {
+			log.Error("URL Handler: Unable to generate server token while registering the server!")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Unable to register temporarily! Issue has been reported. Please try again after some time!"))
 			return
 		}
-		type Response struct{
+		type Response struct {
 			Token string
 		}
-		resp := Response{Token:token}
-		json.NewEncoder(w).Encode(resp)
-		fmt.Println(Models.ServerList)
-})
+		resp := Response{Token: token}
+		err = json.NewEncoder(w).Encode(resp)
+		if err != nil {
+			log.Error("URL Handler: Unable to Encode json response while registering server")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Unable to register temporarily! Issue has been reported. Please try again after some time!"))
+		}
+		log.Info("URL Handler: Successfully registered server: ", *serv)
+		return
+	})
 
 var AddCommandHandler = http.HandlerFunc(
-	func (w http.ResponseWriter, r *http.Request){
+	func(w http.ResponseWriter, r *http.Request) {
+		err := JWT.AuthenticateRequest(r)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
 		comm := new(Models.Command)
 		vars := mux.Vars(r)
 		server, err := Models.GetServerByID(vars["serverID"])
 		if err != nil {
-			fmt.Println(err)
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("No server found for given server ID. Please re-register your server  with the cloud!"))
 			return
 		}
 		dict, err := DecodeJsonData(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Unable to add command temporarily. Please try again after some time!"))
+			return
+		}
 		defer r.Body.Close()
 		for k, v := range dict {
 			switch k {
-				case "CommandString":
-					comm.CommandString = v.(string)
-					comm.CommandServer = server
-					comm.CommandID = Utilities.GenerateUID()
+			case "CommandString":
+				comm.CommandString = v.(string)
+				comm.CommandServer = server
+				comm.CommandID = Utilities.GenerateUID()
 			}
 		}
-		if err != nil {
-			fmt.Println("cannot deocde the post request: ", err)
+
+		if comm != nil {
+			defer comm.Save()
+			log.Info("Successfully added command: ", comm.CommandID, ", ", comm.CommandString, " ; To server: ", server.ServerID)
+			w.WriteHeader(http.StatusOK)
+			return
+		} else {
+			w.WriteHeader(http.StatusNoContent)
+			w.Write([]byte("No command specified"))
 			return
 		}
-		if comm != nil {
-			fmt.Println("comm is : ", comm)
-			comm.Save()
-		}
-		fmt.Println(Models.CommandList)
-})
+	})
 
 var ListCommandHandler = http.HandlerFunc(
-	func (w http.ResponseWriter, r *http.Request){
+	func(w http.ResponseWriter, r *http.Request) {
 		var data = make([]Models.Command, 0)
 		for _, v := range Models.CommandList {
 			data = append(data, *v)
 		}
-		json.NewEncoder(w).Encode(data)
-		return
-})
-
-var RunCommandHandler = http.HandlerFunc(
-	func (w http.ResponseWriter, r *http.Request){
-		dict, err := DecodeJsonData(r.Body)
-		_ = err
-		defer r.Body.Close()
-		requestID := ""
-		commands := make([]*Models.Command, 0)
-		for k, v := range dict {
-			switch k {
-				case "CommandID":
-					commList := v.([]interface{})
-					for _, commID := range commList{
-						comm, err := Models.GetCommandByID(commID.(string))
-						if err != nil {
-							fmt.Println("Error: ",err)
-							continue
-						}
-						commands = append(commands, comm)
-					}
-					requestID = Utilities.GenerateUID()
-					break
-			}
-		}
-		if (requestID != "" && len(commands) != 0) {
-			_, err := Models.GetRequestByID(requestID)
-			if err == nil {
-				//Already existing request id
-				fmt.Println("Request id already exists!")
-				return
-			}
-			runReq := Models.RunCommandRequest{
-				RunCommands:commands,
-				RequestID:requestID,
-			}
-			fmt.Println("Sending request now...")
-			runReq.Send()
-			fmt.Println("Sent! :)")
-			runReq.Save()
-			type Response struct{
-				RequestID string
-			}
-			resp := Response{RequestID:requestID}
-			json.NewEncoder(w).Encode(resp)
+		err := json.NewEncoder(w).Encode(data)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Unable to list commands temporarily. Please try again later!"))
 			return
 		}
+		w.WriteHeader(http.StatusOK)
 		return
-})
+	})
+
+var RunCommandHandler = http.HandlerFunc(
+	func(w http.ResponseWriter, r *http.Request) {
+		dict, err := DecodeJsonData(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Unable to run commands temporarily. Please try again later!"))
+			return
+		}
+		defer r.Body.Close()
+
+		requestID := ""
+		commands := make([]*Models.Command, 0)
+		errorComms := make([]string, 0)
+		for k, v := range dict {
+			switch k {
+			case "CommandID":
+				commList := v.([]interface{})
+				for _, commID := range commList {
+					comm, err := Models.GetCommandByID(commID.(string))
+
+					//command ID does not exist
+					if err != nil {
+						errorComms = append(errorComms, commID.(string))
+						continue
+					}
+
+					commands = append(commands, comm)
+				}
+				requestID = Utilities.GenerateUID()
+				break
+			}
+		}
+
+		//One or more command IDs do not exists
+		if len(errorComms) != 0 {
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write([]byte("No commands regisitered for command ID: " + strings.Join(errorComms, ",")))
+			return
+		}
+
+		if len(commands) != 0 {
+			_, err := Models.GetRequestByID(requestID)
+
+			//Already existing request id
+			if err == nil {
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte("Request already exists"))
+				return
+			}
+
+			runReq := Models.RunCommandRequest{
+				RunCommands: commands,
+				RequestID:   requestID,
+			}
+
+			err = runReq.Send()
+			if err != nil {
+				log.Error("URL Handler: Unable to send command run request. Error : ", err)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("Unable to list commands temporarily. Please try again later!"))
+				return
+			}
+			defer runReq.Save()
+
+			type Response struct {
+				RequestID string
+			}
+			resp := Response{RequestID: requestID}
+			err = json.NewEncoder(w).Encode(resp)
+			if err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("Unable to list commands temporarily. Please try again later!"))
+				return
+			}
+		} else {
+			//No commands in the request
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Command list is empty. Please send atleast one command!"))
+		}
+		log.Info("URL Handler: Successfully responded to run command request!")
+		return
+	})

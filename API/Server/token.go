@@ -1,5 +1,5 @@
-package Server;
+package Server
 
-func GenerateServerToken() (string, error){
+func GenerateServerToken() (string, error) {
 	return "7777", nil
 }

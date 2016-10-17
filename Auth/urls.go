@@ -1,6 +1,8 @@
 package Auth
 
-import "github.com/anshul35/ownit/Router"
+import (
+	"github.com/anshul35/ownit/Router"
+)
 
 var RegisterMe = "Auth"
 
