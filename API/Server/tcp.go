@@ -2,8 +2,10 @@ package Server
 
 import (
 	"fmt"
-	"github.com/anshul35/ownit/Models"
 	"net"
+
+	"github.com/anshul35/ownit/Auth/JWT"
+	"github.com/anshul35/ownit/Models"
 )
 
 func TCPHandler(conn net.Conn) {
@@ -18,6 +20,33 @@ func TCPHandler(conn net.Conn) {
 	}
 	requestID := string(buffer[:n])
 	fmt.Println("Response for request id ", requestID)
+
+	n, err = conn.Read(buffer)
+	if err != nil {
+		fmt.Println("Cannot read buffer")
+		return
+	}
+	serverID := string(buffer[:n])
+	fmt.Println("Response from server id ", serverID)
+
+	n, err = conn.Read(buffer)
+	if err != nil {
+		fmt.Println("Cannot read buffer")
+		return
+	}
+	token := buffer[:n]
+	fmt.Println("Response token ", token)
+
+	server, err := Models.GetServerByID(serverID)
+	if err != nil {
+		fmt.Println("No server found")
+		return
+	}
+	err = JWT.AuthenticateServerToken(server, token)
+	if err != nil {
+		fmt.Println("Not authenticated ", err)
+		return
+	}
 
 	//Get req if the requestID still valid?
 	runReq, err := Models.GetRequestByID(requestID)

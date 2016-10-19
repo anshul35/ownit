@@ -1,6 +1,7 @@
 package JWT
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/anshul35/ownit/Models"
 	"github.com/anshul35/ownit/Settings/Constants"
+	"github.com/anshul35/ownit/Utilities"
 )
 
 func GetJWTToken(user *Models.User) (string, error) {
@@ -26,7 +28,7 @@ func GetJWTToken(user *Models.User) (string, error) {
 			"exp":    time.Now().Add(duration).Unix(),
 			"iat":    time.Now().Unix(),
 		})
-	key := Constants.TokenSecret
+	key := Constants.ClientTokenSecret
 	tokenString, err := token.SignedString([]byte(key))
 	user.JWTToken = tokenString
 	if err != nil {
@@ -35,7 +37,7 @@ func GetJWTToken(user *Models.User) (string, error) {
 	return tokenString, err
 }
 
-func AuthenticateRequest(r *http.Request) error {
+func AuthenticateClientRequest(r *http.Request) error {
 	params := r.URL.Query()
 	p, ok := params["jwt_token"]
 	if !ok {
@@ -43,7 +45,7 @@ func AuthenticateRequest(r *http.Request) error {
 	}
 	tokenString := p[0]
 	token, err := jwt.Parse(tokenString, func(tok *jwt.Token) (interface{}, error) {
-		secret := Constants.TokenSecret
+		secret := Constants.ClientTokenSecret
 		return []byte(secret), nil
 	})
 
@@ -75,4 +77,36 @@ func AuthenticateRequest(r *http.Request) error {
 		//Unknown error in the token
 		return errors.New("Cannot verify this token! Please login again and get a new token!")
 	}
+}
+
+func AuthenticateServerToken(serv *Models.Server, token []byte) error {
+	json_data, err := Utilities.DecryptAES(serv.Key, token)
+	if err != nil {
+		return err
+	}
+	type Data struct {
+		Exp time.Time `json:"exp"`
+		ID  string    `json:"id"`
+	}
+	var data Data
+	err = json.Unmarshal(json_data, &data)
+	if err != nil {
+		log.Info("Server Token Authentication: Wrong format json, Error: ", err)
+		return err
+	}
+
+	//Validate token expiry
+	if data.Exp.Before(time.Now()) {
+		log.Info("Server Token Authentication: Request token has expired. Server ID: ", serv.ServerID)
+		return errors.New("Token is expired.")
+	}
+
+	//Validate token source
+	if serv.ServerID != data.ID {
+		log.Info("Server Token Authentication: Server IDs in token and request url does nto match")
+		return errors.New("Token Source is un-authorized!")
+	}
+
+	//Everything looks fine.
+	return nil
 }

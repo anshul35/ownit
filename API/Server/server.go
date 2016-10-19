@@ -2,6 +2,7 @@ package Server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -31,7 +32,9 @@ func DecodeJsonData(body io.ReadCloser) (map[string]interface{}, error) {
 
 var RegisterServerHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
+		//Decode Request Json
 		serv := new(Models.Server)
+		defer serv.Save()
 		decoder := json.NewDecoder(r.Body)
 		defer r.Body.Close()
 		err := decoder.Decode(serv)
@@ -41,17 +44,36 @@ var RegisterServerHandler = http.HandlerFunc(
 			w.Write([]byte("Please POST json data in correct format"))
 			return
 		}
-		defer serv.Save()
-		token, err := GenerateServerToken()
-		if err != nil {
-			log.Error("URL Handler: Unable to generate server token while registering the server!")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Unable to register temporarily! Issue has been reported. Please try again after some time!"))
+
+		//Check if the server is already registered
+		_, err = Models.GetServerByID(serv.ServerID)
+		if err == nil {
+			w.WriteHeader(http.StatusAlreadyReported)
+			w.Write([]byte("The server is already registered to the cloud!"))
 			return
 		}
+
+		//Decode and save server's symmetric encryption key (User entered private key)
+		cipher, ok := r.URL.Query()["server_key"]
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Need server key for registeration!"))
+			return
+		}
+		fmt.Println(cipher[0])
+		key, err := Utilities.DecryptRSA([]byte(cipher[0]))
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Need server key for registeration!"))
+			return
+		}
+		serv.Key = key
+
+		token := "32321"
 		type Response struct {
 			Token string
 		}
+		serv.Token = token
 		resp := Response{Token: token}
 		err = json.NewEncoder(w).Encode(resp)
 		if err != nil {
@@ -65,7 +87,7 @@ var RegisterServerHandler = http.HandlerFunc(
 
 var AddCommandHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
-		err := JWT.AuthenticateRequest(r)
+		err := JWT.AuthenticateClientRequest(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(err.Error()))
@@ -109,11 +131,17 @@ var AddCommandHandler = http.HandlerFunc(
 
 var ListCommandHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
+		err := JWT.AuthenticateClientRequest(r)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
 		var data = make([]Models.Command, 0)
 		for _, v := range Models.CommandList {
 			data = append(data, *v)
 		}
-		err := json.NewEncoder(w).Encode(data)
+		err = json.NewEncoder(w).Encode(data)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Write([]byte("Unable to list commands temporarily. Please try again later!"))
@@ -125,6 +153,12 @@ var ListCommandHandler = http.HandlerFunc(
 
 var RunCommandHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
+		err := JWT.AuthenticateClientRequest(r)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
 		dict, err := DecodeJsonData(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)

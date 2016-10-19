@@ -4,6 +4,8 @@ const (
 	TCPHost             = "127.0.0.1"
 	TCPPort             = "6060"
 	ClientServerPort    = "8080"
-	TokenSecret         = "Hoolalalaleleho"
+	ClientTokenSecret   = "Hoolalalaleleho"
 	TokenExpiryDuration = "5m"
+	TokenSecret         = "YayThisIsServerSecret"
+	RSAPrivateKeyFile   = "rsa_private.pem"
 )

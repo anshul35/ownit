@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	//	"time"
 
 	log "github.com/golang/glog"
 
@@ -19,6 +18,8 @@ type Server struct {
 	IP       string
 	Name     string
 	Owner    User
+	Token    string
+	Key      []byte
 }
 
 type Command struct {
