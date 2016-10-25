@@ -87,7 +87,7 @@ func HandleFacebookCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info("Facebook Login Succesfull for user: " + data.Name)
-	user := Models.User{UserID: data.Id, Name: data.Name}
+	user := Models.User{UserID: data.Id, Name: data.Name, Servers: make([]*Models.Server, 0)}
 	jwtToken, err := JWT.GetJWTToken(&user)
 	defer user.Save()
 

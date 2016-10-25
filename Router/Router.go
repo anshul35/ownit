@@ -22,13 +22,17 @@ var routes = make([]Route, 0)
 func RegisterRoute(r Route) {
 	fmt.Println("Registering Route : ", r)
 	routes = append(routes, r)
-	fmt.Println("routes table is now : ", routes)
 }
 
 func StartServer() {
 	r := mux.NewRouter()
+	fmt.Println("routes table is now : ", routes)
 	for _, rt := range routes {
-		r.HandleFunc(rt.Path, rt.Handler).Methods(rt.Method)
+		if rt.Method != "" {
+			r.HandleFunc(rt.Path, rt.Handler).Methods(rt.Method)
+		} else {
+			r.HandleFunc(rt.Path, rt.Handler)
+		}
 	}
 
 	http.Handle("/", r)

@@ -3,8 +3,6 @@ package Utilities
 import (
 	"strconv"
 	"time"
-	//	"crypto/md5"
-	//	"fmt"
 )
 
 func init() {

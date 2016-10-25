@@ -37,4 +37,11 @@ func init() {
 		Handler: Server.RunCommandHandler,
 	}
 	Router.RegisterRoute(r)
+
+	r = Router.Route{
+		Method:  "POST",
+		Path:    basePath + Server.BasePath + "/claim",
+		Handler: Server.ClaimServerHandler,
+	}
+	Router.RegisterRoute(r)	
 }

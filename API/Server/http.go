@@ -33,7 +33,7 @@ func DecodeJsonData(body io.ReadCloser) (map[string]interface{}, error) {
 var RegisterServerHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
 		//Decode Request Json
-		serv := new(Models.Server)
+		serv := Models.NewServer()
 		defer serv.Save()
 		decoder := json.NewDecoder(r.Body)
 		defer r.Body.Close()
@@ -87,7 +87,7 @@ var RegisterServerHandler = http.HandlerFunc(
 
 var AddCommandHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
-		err := JWT.AuthenticateClientRequest(r)
+		_, err := JWT.AuthenticateClientRequest(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(err.Error()))
@@ -131,7 +131,7 @@ var AddCommandHandler = http.HandlerFunc(
 
 var ListCommandHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
-		err := JWT.AuthenticateClientRequest(r)
+		_, err := JWT.AuthenticateClientRequest(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(err.Error()))
@@ -153,12 +153,16 @@ var ListCommandHandler = http.HandlerFunc(
 
 var RunCommandHandler = http.HandlerFunc(
 	func(w http.ResponseWriter, r *http.Request) {
-		err := JWT.AuthenticateClientRequest(r)
+
+		//Auth
+		_, err := JWT.AuthenticateClientRequest(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(err.Error()))
 			return
 		}
+
+		//Read POST data
 		dict, err := DecodeJsonData(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -239,3 +243,46 @@ var RunCommandHandler = http.HandlerFunc(
 		log.Info("URL Handler: Successfully responded to run command request!")
 		return
 	})
+
+
+var ClaimServerHandler = http.HandlerFunc(
+	func (w http.ResponseWriter, r *http.Request) {
+		user, err := JWT.AuthenticateClientRequest(r)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		dict, err := DecodeJsonData(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Unable to run commands temporarily. Please try again later!"))
+			return
+		}
+		defer r.Body.Close()
+		token := ""
+		for k, v := range dict {
+			switch k {
+			case "claim_token":
+				token = v.(string)
+			default:
+				continue
+			}
+		}
+
+		found := false
+		for _, server := range Models.ServerList {
+			if (server.Token == token) && (server.Owner == nil){
+				server.Owner = user
+				user.Servers = append(user.Servers, server)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			w.WriteHeader(http.StatusNoContent)
+			w.Write([]byte("No unclaimed server available with given claim token!"))
+		}
+		return
+})

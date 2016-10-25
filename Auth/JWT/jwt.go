@@ -37,11 +37,11 @@ func GetJWTToken(user *Models.User) (string, error) {
 	return tokenString, err
 }
 
-func AuthenticateClientRequest(r *http.Request) error {
+func AuthenticateClientRequest(r *http.Request) (*Models.User, error) {
 	params := r.URL.Query()
 	p, ok := params["jwt_token"]
 	if !ok {
-		return errors.New("Need an access token for authentication!")
+		return nil, errors.New("Need an access token for authentication!")
 	}
 	tokenString := p[0]
 	token, err := jwt.Parse(tokenString, func(tok *jwt.Token) (interface{}, error) {
@@ -58,24 +58,24 @@ func AuthenticateClientRequest(r *http.Request) error {
 		user.JWTToken = newToken
 		if err != nil {
 			log.Error("Authenticate Request: Unable to generate a new token for user ", userID)
-			return err
+			return nil, err
 		}
 		log.Info("JWT token refreshed for user ", userID)
-		return nil
+		return user, nil
 	} else if ve, ok := err.(*jwt.ValidationError); ok {
 		if ve.Errors&jwt.ValidationErrorMalformed != 0 {
 			//Token is not valid
-			return errors.New("Not a valid token!")
+			return nil, errors.New("Not a valid token!")
 		} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
 			// Token is either expired or not active yet
-			return errors.New("Token has expired or is not valid yet! Please login again to get a new token")
+			return nil, errors.New("Token has expired or is not valid yet! Please login again to get a new token")
 		} else {
 			//Unknown error in the token
-			return errors.New("Cannot verify this token! Please login again and get a new token!")
+			return nil, errors.New("Cannot verify this token! Please login again and get a new token!")
 		}
 	} else {
 		//Unknown error in the token
-		return errors.New("Cannot verify this token! Please login again and get a new token!")
+		return nil, errors.New("Cannot verify this token! Please login again and get a new token!")
 	}
 }
 
